@@ -18,21 +18,21 @@ provider "vsphere" {
 }
 
 data "vsphere_datacenter" "dc" {
-  name = "Datacenter"
+  name = "DC_TOG-STRONG"
 }
 
 data "vsphere_datastore" "datastore" {
-  name          = "Datastore2_NonSSD"
+  name          = "datastore-par4"
   datacenter_id = data.vsphere_datacenter.dc.id
 }
 
 data "vsphere_compute_cluster" "cluster" {
-  name          = "Cluster01"
+  name          = "TOG-STRONG_Cluster"
   datacenter_id = data.vsphere_datacenter.dc.id
 }
 
 data "vsphere_network" "network" {
-  name          = "VM Network"
+  name          = "INFRA TOG-STRONG"
   datacenter_id = data.vsphere_datacenter.dc.id
 }
 

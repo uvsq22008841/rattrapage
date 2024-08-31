@@ -25,12 +25,13 @@ variable "vsphere-unverified-ssl" {
 variable "vsphere-datacenter" {
   type        = string
   description = "VMWare vSphere datacenter"
+  default     = "DC_TOG-STRONG"
 }
 
 variable "vsphere-cluster" {
   type        = string
   description = "VMWare vSphere cluster"
-  default     = ""
+  default     = "TOG-STRONG_Cluster"
 }
 
 variable "vsphere-template-folder" {
@@ -57,11 +58,13 @@ variable "vm-name-prefix" {
 variable "vm-datastore" {
   type        = string
   description = "Datastore used for the vSphere virtual machines"
+  default = "datastore-par4"
 }
 
 variable "vm-network" {
   type        = string
   description = "Network used for the vSphere virtual machines"
+  default     = "INFRA TOG-STRONG"
 }
 
 variable "vm-linked-clone" {

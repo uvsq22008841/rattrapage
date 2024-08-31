@@ -4,7 +4,7 @@
 
 # Connect to VMware vSphere vCenter
 provider "vsphere" {
-  version = "1.23.0"
+  
   vim_keep_alive = 30
   user           = var.vsphere-user
   password       = var.vsphere-password
