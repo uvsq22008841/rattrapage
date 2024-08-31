@@ -1,0 +1,18 @@
+{
+    "vsphere_server": "192.168.40.10",
+    "vsphere_user": "administrator@together-stronger.lan",
+    "vsphere_password": "TMathilde2201@&",
+    "vsphere_template_name": "Win2022",
+    "vsphere_folder": "Templates",
+    "vsphere_dc_name": "DC_TOG-STRONG",
+    "vsphere_compute_cluster": "TOG-STRONG_Cluster",
+    "vsphere_host": "192.168.40.1",
+    "vsphere_portgroup_name": "INFRA TOG-STRONG",
+    "vsphere_datastore": "datastore-par4",
+    "winadmin_password": "Admin-User-Password123!",
+    "cpu_num": "4",
+    "mem_size": "4096",
+    "disk_size": "51200",
+    "os_iso_path": "[datastore-par4] ISO/en_windows_server_2022x64_dvd_.iso",
+    "vmtools_iso_path":"[datastore-par4] ISO/windows.iso"
+}
