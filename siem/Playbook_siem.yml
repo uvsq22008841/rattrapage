@@ -1,0 +1,655 @@
+---
+- name: Setup SIEM directory and download Wazuh files
+  hosts: siemservers
+  become: yes
+  vars:
+  ## noeud du serveur 
+    node_name: node-1
+    
+    tar_file: /home/siem/siem/wazuh-certificates.tar
+## ip serveur    
+    wazuh_ip: "172.16.44.1"
+    
+    
+## user par default    
+    username_value: "admin"
+    password_value: "admin"
+## certificats    
+    certs_dir: /etc/wazuh-indexer/certs
+    certs_dir_fb: /etc/filebeat/certs
+    certs_dirdash: /etc/wazuh-dashboard/certs  
+  tasks:
+
+
+    - name: Create siem directory
+      file:
+        path: /home/siem/siem
+        state: directory
+        mode: '0755'
+
+################          INDEXER                    ################
+
+    - name: Download wazuh-certs-tool.sh to siem directory
+      get_url:
+        url: https://packages.wazuh.com/4.8/wazuh-certs-tool.sh
+        dest: /home/siem/siem/wazuh-certs-tool.sh
+        mode: '0755'
+
+    - name: Download config.yml to siem directory
+      get_url:
+        url: https://packages.wazuh.com/4.8/config.yml
+        dest: /home/siem/siem/config.yml
+
+#name: Update IP addresses in config.yml
+    - name: Replace <indexer-node-ip> with 172.16.44.1
+      replace:
+        path: /home/siem/siem/config.yml
+        regexp: '^\s*ip:\s*"<indexer-node-ip>"'
+        replace: '      ip: "172.16.44.1"'
+        backup: yes
+
+    - name: Replace <wazuh-manager-ip> with 172.16.44.1
+      replace:
+        path: /home/siem/siem/config.yml
+        regexp: '^\s*ip:\s*"<wazuh-manager-ip>"'
+        replace: '      ip: "172.16.44.1"'
+        backup: yes
+
+    - name: Replace <dashboard-node-ip> with 172.16.44.1
+      replace:
+        path: /home/siem/siem/config.yml
+        regexp: '^\s*ip:\s*"<dashboard-node-ip>"'
+        replace: '      ip: "172.16.44.1"'
+        backup: yes
+
+
+
+#name: Run wazuh-certs-tool.sh script
+ 
+    - name: Ensure wazuh-certs-tool.sh is executable
+      file:
+        path: /home/siem/siem/wazuh-certs-tool.sh
+        mode: '0755'
+
+    - name: Execute wazuh-certs-tool.sh with -A option
+      command: /home/siem/siem/wazuh-certs-tool.sh -A
+      args:
+        chdir: /home/siem/siem/
+# name: Archive and remove wazuh-certificates directory
+    - name: Create tar archive of wazuh-certificates directory
+      command:
+        cmd: tar -cvf /home/siem/siem/wazuh-certificates.tar -C /home/siem/siem/wazuh-certificates .
+#name: Install required packages  
+    - name: Remove wazuh-certificates directory
+      file:
+        path: /home/siem/siem/wazuh-certificates
+        state: absent
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install debconf, adduser, and procps packages
+      apt:
+        name:
+          - debconf
+          - adduser
+          - procps
+        state: present
+
+#name: Install gnupg and apt-transport-https
+
+    - name: Install gnupg and apt-transport-https
+      apt:
+        name:
+          - gnupg
+          - apt-transport-https
+        state: present
+
+#name: Add Wazuh GPG key and set permissions
+    
+    - name: Import Wazuh GPG key
+      shell: |
+        curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring /usr/share/keyrings/wazuh.gpg --import
+      args:
+        executable: /bin/bash
+
+    - name: Set permissions on the GPG keyring
+      file:
+        path: /usr/share/keyrings/wazuh.gpg
+        mode: '0644'
+
+#name: Add Wazuh APT repository
+
+    - name: Add Wazuh repository to sources list
+      lineinfile:
+        path: /etc/apt/sources.list.d/wazuh.list
+        line: 'deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main'
+        create: yes
+
+    - name: Update APT package index
+      apt:
+        update_cache: yes
+
+#name: Install Wazuh Indexer
+    - name: Install wazuh-indexer package
+      apt:
+        name: wazuh-indexer
+        state: present
+        update_cache: yes
+        cache_valid_time: 3600
+
+
+
+#name: Configure Wazuh Indexer Certificates
+    - name: Create directory for Wazuh indexer certificates
+      file:
+        path: "{{ certs_dir }}"
+        state: directory
+        mode: '0750'
+
+    - name: Extract Wazuh certificates from tar file
+      unarchive:
+        src: "{{ tar_file }}"
+        dest: "{{ certs_dir }}"
+        extra_opts:
+          - --strip-components=1
+        remote_src: yes
+
+    - name: Move indexer certificate to correct location
+      command:
+        cmd: mv -n "{{ certs_dir }}/{{ node_name }}.pem" "{{ certs_dir }}/indexer.pem"
+      args:
+        creates: "{{ certs_dir }}/indexer.pem"
+
+    - name: Move indexer key certificate to correct location
+      command:
+        cmd: mv -n "{{ certs_dir }}/{{ node_name }}-key.pem" "{{ certs_dir }}/indexer-key.pem"
+      args:
+        creates: "{{ certs_dir }}/indexer-key.pem"
+
+    - name: Set directory permissions
+      file:
+        path: "{{ certs_dir }}"
+        state: directory
+        mode: '0500'
+
+    - name: Set file permissions for certificates
+      file:
+        path: "{{ item }}"
+        mode: '0400'
+        state: file
+      loop:
+        - "{{ certs_dir }}/indexer.pem"
+        - "{{ certs_dir }}/indexer-key.pem"
+        - "{{ certs_dir }}/admin.pem"
+        - "{{ certs_dir }}/admin-key.pem"
+        - "{{ certs_dir }}/root-ca.pem"
+
+    - name: Change ownership of the certificates directory
+      file:
+        path: "{{ certs_dir }}"
+        owner: wazuh-indexer
+        group: wazuh-indexer
+        recurse: yes
+
+    - name: Reload systemd indexer configuration
+      systemd:
+        daemon_reload: yes
+
+    - name: Enable Wazuh Indexer service to start on boot
+      systemd:
+        name: wazuh-indexer
+        enabled: yes
+
+    - name: Start Wazuh Indexer service
+      systemd:
+        name: wazuh-indexer
+        state: started
+
+    - name: Execute indexer-security-init.sh script
+      command: /usr/share/wazuh-indexer/bin/indexer-security-init.sh
+      args:
+        chdir: /usr/share/wazuh-indexer/bin/
+        creates: /var/ossec/var/run/secure.lock
+
+    - name: Perform a GET request to Wazuh Indexer
+      uri:
+        url: "https://172.16.44.1:9200"
+        method: GET
+        user: admin
+        password: admin
+        force_basic_auth: yes
+        validate_certs: no
+        return_content: yes
+      register: result
+
+    - name: Show result of the request
+      debug:
+        msg: "{{ result.content }}"
+
+
+
+############################     MANAGER    ###########################################################################
+#name: Install Wazuh Manager
+
+    - name: Install wazuh-manager
+      apt:
+        name: wazuh-manager
+        state: present
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Reload systemd indexer configuration
+      systemd:
+        daemon_reload: yes 
+
+    - name: Enable Wazuh manager service to start on boot
+      systemd:
+        name: wazuh-manager
+        enabled: yes 
+
+
+#name: Install Filebeat
+    - name: Install filebeat
+      apt:
+        name: filebeat
+        state: present
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Create /etc/filebeat directory
+      file:
+        path: /etc/filebeat
+        state: directory
+        mode: '0755'
+
+    - name: Ensure /etc/filebeat directory exists
+      file:
+        path: /etc/filebeat
+        state: directory
+        mode: '0755'
+
+    - name: Download filebeat.yml configuration using curl
+      shell: curl -so /etc/filebeat/filebeat.yml https://packages.wazuh.com/4.8/tpl/wazuh/filebeat/filebeat.yml
+      
+#        hosts: ["localhost:9200"]
+    - name: Replace IP in filebeat.yml to point to the correct Wazuh server
+      replace:
+        path: /etc/filebeat/filebeat.yml
+        regexp: '^\s*hosts: \["127.0.0.1:9200"\]'
+        replace: '  hosts: ["{{ wazuh_ip }}:9200"]'
+        backup: yes
+   
+    - name: "network.host: 0.0.0.0 by 172.16.44.1"
+      replace:
+        path: /etc/filebeat/filebeat.yml
+        regexp: 'network.host: "0.0.0.0"'
+        replace: 'network.host: "172.16.44.1"'
+        backup: yes
+
+    #- name: Restart Filebeat to apply changes
+     # service:
+      #  name: filebeat
+       # state: restarted
+
+#filebeat keystore create
+    - name: Create Filebeat keystore
+      command: filebeat keystore create --force
+      args:
+        chdir: /etc/filebeat
+
+
+
+
+
+# user and passwrd default
+    - name: Add username to Filebeat keystore
+      shell: echo "{{ username_value }}" | filebeat keystore add username --stdin --force
+      args:
+        chdir: /etc/filebeat
+
+    - name: Add password to Filebeat keystore
+      shell: echo "{{ password_value }}" | filebeat keystore add password --stdin --force
+      args:
+        chdir: /etc/filebeat
+
+#name: Download wazuh-template.json and set permissions
+    - name: Download wazuh-template.json
+      get_url:
+        url: https://raw.githubusercontent.com/wazuh/wazuh/v4.8.2/extensions/elasticsearch/7.x/wazuh-template.json
+        dest: /etc/filebeat/wazuh-template.json
+        mode: '0644'
+
+    - name: Set permissions on wazuh-template.json
+      file:
+        path: /etc/filebeat/wazuh-template.json
+        mode: '0644'
+        owner: root
+        group: root
+
+
+#name: Setup Filebeat certificates
+
+    - name: Create directory for Filebeat certificates
+      file:
+        path: "{{ certs_dir_fb }}"
+        state: directory
+        mode: '0755'
+
+    - name: Extract all certificates from wazuh-certificates.tar
+      command: tar -xf {{ tar_file }} -C {{ certs_dir_fb }}
+
+    - name: Rename {{ node_name }}.pem to filebeat.pem
+      command: mv -n {{ certs_dir_fb }}/{{ node_name }}.pem {{ certs_dir_fb }}/filebeat.pem
+
+    - name: Rename {{ node_name }}-key.pem to filebeat-key.pem
+      command: mv -n {{ certs_dir_fb }}/{{ node_name }}-key.pem {{ certs_dir_fb }}/filebeat-key.pem
+
+    - name: Set directory permissions to 500
+      file:
+        path: "{{ certs_dir_fb }}"
+        mode: '0500'
+
+    - name: Set permissions for certificates files to 400
+      file:
+        path: "{{ certs_dir_fb }}/{{ item }}"
+        mode: '0400'
+      loop:
+        - filebeat.pem
+        - filebeat-key.pem
+        - root-ca.pem
+
+    - name: Set ownership of the certs directory and its contents to root
+      file:
+        path: "{{ certs_dir_fb }}"
+        owner: root
+        group: root
+        recurse: yes
+
+    - name: Reload systemd manager configuration
+      command: systemctl daemon-reload
+      become: true
+
+    - name: Enable Wazuh Manager service
+      systemd:
+        name: wazuh-manager
+        enabled: yes
+      become: true
+
+    - name: Start Wazuh Manager service
+      systemd:
+        name: wazuh-manager
+        state: started
+      become: true    
+
+    - name: Reload systemd manager configuration
+      command: systemctl daemon-reload
+      become: true
+
+    - name: Enable Filebeat service
+      systemd:
+        name: filebeat
+        enabled: yes
+      become: true
+
+    - name: Start Filebeat service
+      systemd:
+        name: filebeat
+        state: started
+      become: true
+
+
+    
+
+    - name: Test Filebeat output
+      command: filebeat test output
+      register: test_output
+      failed_when: test_output.rc != 0
+
+    - name: Display Filebeat test output result
+      debug:
+        msg: "{{ test_output.stdout }}"
+
+#############################  DASHBOARD       ###############################################
+
+    - name: Install required packages
+      apt:
+        name:
+          - gnupg
+          - apt-transport-https
+          - debhelper
+          - tar
+          - curl
+          - libcap2-bin
+        state: present
+        update_cache: yes
+
+    - name: Add Wazuh GPG key
+      ansible.builtin.command: >
+        curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH |
+        gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import
+      args:
+        creates: /usr/share/keyrings/wazuh.gpg
+
+    - name: Set permissions for Wazuh GPG key
+      file:
+        path: /usr/share/keyrings/wazuh.gpg
+        mode: '0644'
+
+    - name: Add Wazuh repository to sources list
+      ansible.builtin.command: >
+        echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" |
+        tee /etc/apt/sources.list.d/wazuh.list
+      args:
+        creates: /etc/apt/sources.list.d/wazuh.list
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install wazuh-dashboard package
+      apt:
+        name: wazuh-dashboard
+        state: present
+
+    - name: Replace localhost with 172.16.44.1 in opensearch_dashboards.yml
+      replace:
+        path: /etc/wazuh-dashboard/opensearch_dashboards.yml
+        regexp: 'opensearch.hosts: https://localhost:9200'
+        replace: 'opensearch.hosts: https://172.16.44.1:9200'
+        backup: yes
+
+    - name: Create directory for Wazuh Dashboard certificates
+      file:
+        path: /etc/wazuh-dashboard/certs
+        state: directory
+        mode: '0755'
+
+    - name: Extract required certificates from wazuh-certificates.tar
+      command: tar -xf /home/siem/siem/wazuh-certificates.tar -C /etc/wazuh-dashboard/certs/ ./node-1.pem ./node-1-key.pem ./root-ca.pem
+
+    - name: Check if dashboard.pem exists
+      stat:
+        path: /etc/wazuh-dashboard/certs/dashboard.pem
+      register: dashboard_pem
+
+    - name: Rename node-1.pem to dashboard.pem
+      command: mv /etc/wazuh-dashboard/certs/node-1.pem /etc/wazuh-dashboard/certs/dashboard.pem
+      when: not dashboard_pem.stat.exists
+
+    - name: Check if dashboard-key.pem exists
+      stat:
+        path: /etc/wazuh-dashboard/certs/dashboard-key.pem
+      register: dashboard_key_pem
+
+    - name: Rename node-1-key.pem to dashboard-key.pem
+      command: mv /etc/wazuh-dashboard/certs/node-1-key.pem /etc/wazuh-dashboard/certs/dashboard-key.pem
+      when: not dashboard_key_pem.stat.exists
+    - name: Set directory permissions to 500
+      file:
+        path: /etc/wazuh-dashboard/certs
+        mode: '0500'
+
+    - name: Set permissions for certificate files to 400
+      file:
+        path: "/etc/wazuh-dashboard/certs/{{ item }}"
+        mode: '0400'
+      loop:
+        - dashboard.pem
+        - dashboard-key.pem
+        - root-ca.pem
+
+    - name: Set ownership of the certs directory and its contents to wazuh-dashboard
+      file:
+        path: /etc/wazuh-dashboard/certs
+        owner: wazuh-dashboard
+        group: wazuh-dashboard
+        recurse: yes
+
+    - name: Reload systemd to apply changes
+      systemd:
+        daemon_reload: yes
+
+    - name: Enable and start Wazuh Dashboard service
+      systemd:
+        name: wazuh-dashboard
+        enabled: yes
+        state: started
+ 
+
+    - name: /usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml  
+      replace:
+        path: /etc/wazuh-dashboard/opensearch_dashboards.yml
+        regexp: '^\s*url: https://locahost'
+        replace: '      url: https://172.16.44.1"'
+        backup: yes
+
+
+ #################################### TEMPLATE ##############################################3
+
+    - name: Stop Filebeat service
+      ansible.builtin.systemd:
+        name: filebeat
+        state: stopped
+
+
+    - name: Download Wazuh Elasticsearch template
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/wazuh/wazuh/v4.8.2/extensions/elasticsearch/7.x/wazuh-template.json
+        dest: /home/siem/siem/template.json
+        mode: '0644'
+
+    - name: put in template.json
+      replace:
+        path: /home/siem/siem/template.json
+        regexp: '^\s*  ],'
+        replace: '    "my-custom-alerts-*" \n  ],'
+        backup: yes
+
+    - name: Upload Wazuh template using curl
+      ansible.builtin.shell: >
+        curl -XPUT -k -u admin:admin 'https://172.16.44.1:9200/_template/wazuh'
+        -H 'Content-Type: application/json' -d @//home/siem/siem/template.json
+      args:
+        creates: /home/siem/siem/template.json
+      environment:
+        CURL_CA_BUNDLE: /etc/wazuh-dashboard/certs/root-ca.pem
+
+    - name: Restart Filebeat service
+      ansible.builtin.systemd:
+        name: filebeat
+        state: restarted
+
+    - name: Enable filebeat
+      systemd:
+        name: filebeat
+        enabled: yes
+
+    - name: Start filebeat
+      systemd:
+        name: filebeat
+        state: started
+
+
+
+
+
+
+    - name: Restart Wazuh Manager service
+      ansible.builtin.systemd:
+        name: wazuh-manager
+        state: restarted
+
+    - name: Enable  wazuh-manager
+      systemd:
+        name:  wazuh-manager
+        enabled: yes
+
+    - name: Start  wazuh-manager
+      systemd:
+        name:  wazuh-manager
+        state: started
+
+
+
+
+
+
+
+    - name: Restart Wazuh Indexer service
+      ansible.builtin.systemd:
+        name: wazuh-indexer
+        state: restarted
+
+    - name: Enable wazuh-indexer
+      systemd:
+        name:  wazuh-indexer
+        enabled: yes
+
+    - name: Start wazuh-indexer
+      systemd:
+        name:  wazuh-indexer
+        state: started
+
+
+    - name: Restart Wazuh Dashboard service
+      ansible.builtin.systemd:
+        name: wazuh-dashboard
+        state: restarted
+
+
+    - name: Enable wazuh-dashboard
+      systemd:
+        name:  wazuh-dashboard
+        enabled: yes
+
+    - name: Start wazuh-dashboard
+      systemd:
+        name:  wazuh-dashboard
+        state: started
+
+
+
+## ajouter un groupe
+
+    - name: Check if the 'agent_groups' script exists
+      stat:
+        path: "{{ agent_groups_script_path }}"
+      register: agent_groups_stat
+
+    - name: Create 'agent_groups' script if it does not exist
+      copy:
+        content: "{{ agent_group_id_servers }}"
+        dest: "{{ agent_groups_script_path }}"
+        mode: '0755'
+      when: not agent_groups_stat.stat.exists
+
+    - name: Create agent group using the 'agent_groups' script
+      command: "{{ agent_groups_script_path }} -a -g {{ a gent_group_id_servers }} -q"
+      when: agent_groups_stat.stat.exists
+      register: result
+
+    - name: Print the result
+      debug:
+        var: result
