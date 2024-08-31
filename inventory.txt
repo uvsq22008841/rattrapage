@@ -1,0 +1,8 @@
+[webservers]
+web ansible_host=172.16.41.1 ansible_user=web ansible_ssh_private_key_file=~/.ssh/id_ed25519 
+
+[bdservers]
+bd ansible_host=172.16.43.1 ansible_user=bd 
+
+[siemservers]
+siem ansible_host=172.16.44.1 ansible_user=siem ansible_ssh_private_key_file=~/.ssh/id_ed25519 
