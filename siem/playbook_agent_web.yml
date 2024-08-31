@@ -1,0 +1,36 @@
+---
+- name: Install Wazuh Agent
+  hosts: webservers
+  become: yes
+  tasks:
+    - name: Download the Wazuh agent .deb package
+      get_url:
+        url: https://packages.wazuh.com/4.x/apt/pool/main/w/wazuh-agent/wazuh-agent_4.8.2-1_amd64.deb
+        dest: /tmp/wazuh-agent_4.8.2-1_amd64.deb
+
+    - name: Install the Wazuh agent package
+      command: >
+        dpkg -i /tmp/wazuh-agent_4.8.2-1_amd64.deb
+      environment:
+        WAZUH_MANAGER: '172.16.41.1'
+        WAZUH_AGENT_GROUP: 'servers'
+        WAZUH_AGENT_NAME: 'webserver'
+
+    - name: Clean up the .deb package
+      file:
+        path: /tmp/wazuh-agent_4.8.2-1_amd64.deb
+        state: absent
+        
+    - name: Reload systemd configuration
+      systemd:
+        daemon_reload: yes
+
+    - name: Enable Wazuh Agent service to start on boot
+      systemd:
+        name: wazuh-agent
+        enabled: yes
+
+    - name: Start Wazuh Agent service
+      systemd:
+        name: wazuh-agent
+        state: started
