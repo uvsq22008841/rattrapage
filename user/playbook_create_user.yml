@@ -1,0 +1,18 @@
+---
+- name: Créer un utilisateur sur une machine distante
+  hosts: all
+  become: yes
+
+  vars:
+    nouveau_utilisateur: er
+    mot_de_passe: "{{ 'er' | password_hash('sha512') }}"
+
+  tasks:
+    - name: Créer l'utilisateur
+      user:
+        name: "{{ nouveau_utilisateur }}"
+        password: "{{ mot_de_passe }}"
+        groups: sudo
+        shell: /bin/bash
+        create_home: true
+        state: present
