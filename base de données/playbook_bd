@@ -1,0 +1,46 @@
+---
+- name: Installer et configurer MariaDB Server
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Installer MariaDB et PyMySQL
+      apt:
+        name:
+          - mariadb-server
+          - python3-pymysql
+        state: present
+        update_cache: yes
+
+    - name: Assurer que le service MariaDB est démarré et activé
+      systemd:
+        name: mariadb
+        state: started
+        enabled: yes
+
+    - name: Créer la base de données db1
+      mysql_db:
+        name: db1
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Créer la base de données db2
+      mysql_db:
+        name: db2
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Créer un utilisateur avec tous les privilèges
+      mysql_user:
+        name: lo
+        password: lo
+        priv: '*.*:ALL'
+        host: '%'
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Redémarrer MariaDB
+      service:
+        name: mariadb
+        state: restarted
+        enabled: yes
