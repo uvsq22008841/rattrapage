@@ -1,0 +1,53 @@
+---
+- name: installer apache 2 et creer un site 
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Installer Apache
+      apt:
+        name: apache2
+        update_cache: true
+        state: present
+
+    - name: Créer un répertoire gci
+      file:
+        path: /var/www/gci/
+        state: directory
+        mode: '0755'
+      
+    - name: Copier un fichier HTML sur le web server
+      copy:
+        src: /home/vm/web.html
+        dest: /var/www/gci/web.html
+        
+    - name: Copier le fichier 000-default.conf dans gci.conf
+      copy:
+        src: /etc/apache2/sites-available/000-default.conf
+        dest: /etc/apache2/sites-available/gci.conf
+        remote_src: yes
+
+    - name: Modifier DocumentRoot dans gci.conf
+      lineinfile:
+        path: /etc/apache2/sites-available/gci.conf
+        regexp: 'DocumentRoot /var/www/html'
+        line: '	DocumentRoot /var/www/gci'
+        state: present
+
+    - name: Modifier servername dans gci.conf
+      lineinfile:
+        path: /etc/apache2/sites-available/gci.conf
+        regexp: '^\s*#ServerName www.example.com'
+        line: '	ServerName gci.example.com'
+        state: present
+        
+      
+    - name: Activer le site gci.conf avec Apache
+      command: sudo a2ensite gci.conf
+      notify: Restart Apache
+
+  handlers:
+    - name: Restart Apache
+      service:
+        name: apache2
+        state: restarted
