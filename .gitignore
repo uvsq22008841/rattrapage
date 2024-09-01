@@ -1,7 +1,5 @@
 vsphere.pkrvars.hcl
 variables.auto.pkrvars.hcl
-
-
 # Cache objects
 packer_cache/
 
